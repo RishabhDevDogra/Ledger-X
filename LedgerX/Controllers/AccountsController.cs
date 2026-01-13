@@ -10,10 +10,10 @@ public class AccountsController : ControllerBase
 {
     private static List<Account> _accounts = new()
     {
-        new Account { Code = "1000", Name = "Cash", Type = "Asset", Balance = 50000 },
-        new Account { Code = "1010", Name = "Bank Account", Type = "Asset", Balance = 100000 },
-        new Account { Code = "1100", Name = "Accounts Receivable", Type = "Asset", Balance = 25000 },
-        new Account { Code = "2000", Name = "Accounts Payable", Type = "Liability", Balance = 15000 },
+        new Account { Code = "10", Name = "Cash", Type = "Asset", Balance = 50000 },
+        new Account { Code = "130", Name = "Bank Account", Type = "Asset", Balance = 100000 },
+        new Account { Code = "1300", Name = "Accounts Receivable", Type = "Asset", Balance = 25000 },
+        new Account { Code = "2300", Name = "Accounts Payable", Type = "Liability", Balance = 15000 },
         new Account { Code = "2100", Name = "Short Term Loans", Type = "Liability", Balance = 30000 },
         new Account { Code = "3000", Name = "Common Stock", Type = "Equity", Balance = 100000 },
         new Account { Code = "3100", Name = "Retained Earnings", Type = "Equity", Balance = 60000 },
