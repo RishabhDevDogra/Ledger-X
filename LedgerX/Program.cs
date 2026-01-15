@@ -1,9 +1,26 @@
+using LedgerX.Repositories;
+using LedgerX.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Register repositories
+builder.Services.AddSingleton<IAccountRepository, AccountRepository>();
+builder.Services.AddSingleton<IJournalEntryRepository, JournalEntryRepository>();
+builder.Services.AddSingleton<ILedgerKeyRepository, LedgerKeyRepository>();
+
+// Register services
+builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<IJournalEntryService, JournalEntryService>();
+builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<ILedgerKeyService, LedgerKeyService>();
+
+// Add logging
+builder.Services.AddLogging();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -25,12 +42,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-else
-{
-    app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-    app.UseHsts();
-}
 
 app.UseHttpsRedirection();
 
@@ -41,12 +52,6 @@ app.UseRouting();
 
 app.UseAuthorization();
 
-app.MapStaticAssets();
-
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
-    .WithStaticAssets();
-
+app.MapControllers();
 
 app.Run();

@@ -1,73 +1,37 @@
 using Microsoft.AspNetCore.Mvc;
-using LedgerX.Models;
+using LedgerX.DTOs;
+using LedgerX.Services;
 
 namespace LedgerX.Controllers;
 
+/// <summary>
+/// Controller for Journal Entry operations
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
 public class JournalEntriesController : ControllerBase
 {
-    private static List<JournalEntry> _journalEntries = new()
+    private readonly IJournalEntryService _journalEntryService;
+    private readonly ILogger<JournalEntriesController> _logger;
+
+    public JournalEntriesController(IJournalEntryService journalEntryService, ILogger<JournalEntriesController> logger)
     {
-        new JournalEntry
-        {
-            Description = "Initial cash deposit",
-            ReferenceNumber = "JE-001",
-            EntryDate = new DateTime(2024, 1, 1),
-            IsPosted = true,
-            Lines = new()
-            {
-                new JournalLine { AccountCode = "1010", AccountId = "1", DebitAmount = 50000, Narration = "Debit Bank" },
-                new JournalLine { AccountCode = "3000", AccountId = "2", CreditAmount = 50000, Narration = "Credit Common Stock" }
-            }
-        },
-        new JournalEntry
-        {
-            Description = "Sales transaction",
-            ReferenceNumber = "JE-002",
-            EntryDate = new DateTime(2024, 1, 5),
-            IsPosted = true,
-            Lines = new()
-            {
-                new JournalLine { AccountCode = "1000", AccountId = "1", DebitAmount = 25000, Narration = "Debit Cash" },
-                new JournalLine { AccountCode = "4000", AccountId = "3", CreditAmount = 25000, Narration = "Credit Sales Revenue" }
-            }
-        },
-        new JournalEntry
-        {
-            Description = "Purchase inventory on credit",
-            ReferenceNumber = "JE-003",
-            EntryDate = new DateTime(2024, 1, 10),
-            IsPosted = true,
-            Lines = new()
-            {
-                new JournalLine { AccountCode = "5000", AccountId = "4", DebitAmount = 10000, Narration = "Debit COGS" },
-                new JournalLine { AccountCode = "2000", AccountId = "5", CreditAmount = 10000, Narration = "Credit Accounts Payable" }
-            }
-        },
-        new JournalEntry
-        {
-            Description = "Pending salary payment",
-            ReferenceNumber = "JE-004",
-            EntryDate = DateTime.UtcNow,
-            IsPosted = false,
-            Lines = new()
-            {
-                new JournalLine { AccountCode = "5100", AccountId = "6", DebitAmount = 5000, Narration = "Debit Salary Expense" },
-                new JournalLine { AccountCode = "2100", AccountId = "7", CreditAmount = 5000, Narration = "Credit Short Term Loans" }
-            }
-        }
-    };
+        _journalEntryService = journalEntryService ?? throw new ArgumentNullException(nameof(journalEntryService));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
 
     /// <summary>
     /// Get all journal entries
     /// </summary>
     /// <returns>List of all journal entries</returns>
     [HttpGet]
-    public ActionResult<IEnumerable<JournalEntry>> GetAllEntries()
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<JournalEntryDto>>> GetAllEntries()
     {
-        return Ok(_journalEntries);
+        _logger.LogDebug("GetAllEntries endpoint called");
+        var entries = await _journalEntryService.GetAllEntriesAsync();
+        return Ok(entries);
     }
 
     /// <summary>
@@ -76,13 +40,56 @@ public class JournalEntriesController : ControllerBase
     /// <param name="id">Journal entry ID</param>
     /// <returns>Journal entry details</returns>
     [HttpGet("{id}")]
-    public ActionResult<JournalEntry> GetEntryById(string id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<JournalEntryDto>> GetEntryById(string id)
     {
-        var entry = _journalEntries.FirstOrDefault(e => e.Id == id);
+        _logger.LogDebug("GetEntryById endpoint called with id {EntryId}", id);
+        var entry = await _journalEntryService.GetEntryByIdAsync(id);
+        
         if (entry == null)
-            return NotFound(new { message = "Journal entry not found" });
+            return NotFound(new { message = $"Journal entry with id {id} not found" });
 
         return Ok(entry);
+    }
+
+    /// <summary>
+    /// Get all posted journal entries
+    /// </summary>
+    /// <returns>List of posted journal entries</returns>
+    [HttpGet("posted")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<JournalEntryDto>>> GetPostedEntries()
+    {
+        _logger.LogDebug("GetPostedEntries endpoint called");
+        var entries = await _journalEntryService.GetPostedEntriesAsync();
+        return Ok(entries);
+    }
+
+    /// <summary>
+    /// Get journal entries by date range
+    /// </summary>
+    /// <param name="startDate">Start date</param>
+    /// <param name="endDate">End date</param>
+    /// <returns>List of journal entries within date range</returns>
+    [HttpGet("by-date-range")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IEnumerable<JournalEntryDto>>> GetEntriesByDateRange(
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate)
+    {
+        try
+        {
+            _logger.LogDebug("GetEntriesByDateRange endpoint called with startDate {StartDate} and endDate {EndDate}", startDate, endDate);
+            var entries = await _journalEntryService.GetEntriesByDateRangeAsync(startDate, endDate);
+            return Ok(entries);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning("Validation error in GetEntriesByDateRange: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -91,32 +98,60 @@ public class JournalEntriesController : ControllerBase
     /// <param name="request">Journal entry creation request</param>
     /// <returns>Created journal entry</returns>
     [HttpPost]
-    public ActionResult<JournalEntry> CreateJournalEntry([FromBody] CreateJournalEntryRequest request)
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<JournalEntryDto>> CreateJournalEntry([FromBody] CreateJournalEntryDto request)
     {
-        if (request.Lines == null || request.Lines.Count < 2)
-            return BadRequest(new { message = "Journal entry must have at least 2 lines (debit and credit)" });
-
-        // Verify double-entry principle: total debits = total credits
-        decimal totalDebits = request.Lines.Sum(l => l.DebitAmount);
-        decimal totalCredits = request.Lines.Sum(l => l.CreditAmount);
-
-        if (totalDebits != totalCredits)
-            return BadRequest(new { 
-                message = "Double-entry bookkeeping violation: Total debits must equal total credits",
-                totalDebits,
-                totalCredits
-            });
-
-        var entry = new JournalEntry
+        try
         {
-            Description = request.Description,
-            ReferenceNumber = request.ReferenceNumber,
-            EntryDate = request.EntryDate ?? DateTime.UtcNow,
-            Lines = request.Lines
-        };
+            _logger.LogInformation("CreateJournalEntry endpoint called with reference {ReferenceNumber}", request.ReferenceNumber);
+            var entry = await _journalEntryService.CreateJournalEntryAsync(request);
+            return CreatedAtAction(nameof(GetEntryById), new { id = entry.Id }, entry);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning("Validation error in CreateJournalEntry: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Business logic error in CreateJournalEntry: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 
-        _journalEntries.Add(entry);
-        return CreatedAtAction(nameof(GetEntryById), new { id = entry.Id }, entry);
+    /// <summary>
+    /// Update a journal entry (only if not posted)
+    /// </summary>
+    /// <param name="id">Journal entry ID</param>
+    /// <param name="request">Update request</param>
+    /// <returns>Updated journal entry</returns>
+    [HttpPut("{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<JournalEntryDto>> UpdateJournalEntry(string id, [FromBody] UpdateJournalEntryDto request)
+    {
+        try
+        {
+            _logger.LogInformation("UpdateJournalEntry endpoint called for id {EntryId}", id);
+            var entry = await _journalEntryService.UpdateJournalEntryAsync(id, request);
+            
+            if (entry == null)
+                return NotFound(new { message = $"Journal entry with id {id} not found" });
+
+            return Ok(entry);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning("Validation error in UpdateJournalEntry: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Business logic error in UpdateJournalEntry: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -124,17 +159,26 @@ public class JournalEntriesController : ControllerBase
     /// </summary>
     /// <param name="id">Journal entry ID</param>
     [HttpPost("{id}/post")]
-    public ActionResult<JournalEntry> PostJournalEntry(string id)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult> PostJournalEntry(string id)
     {
-        var entry = _journalEntries.FirstOrDefault(e => e.Id == id);
-        if (entry == null)
-            return NotFound(new { message = "Journal entry not found" });
+        try
+        {
+            _logger.LogInformation("PostJournalEntry endpoint called for id {EntryId}", id);
+            var result = await _journalEntryService.PostJournalEntryAsync(id);
 
-        if (entry.IsPosted)
-            return BadRequest(new { message = "Journal entry is already posted" });
+            if (!result)
+                return NotFound(new { message = $"Journal entry with id {id} not found or already posted" });
 
-        entry.IsPosted = true;
-        return Ok(entry);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Business logic error in PostJournalEntry: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -142,27 +186,25 @@ public class JournalEntriesController : ControllerBase
     /// </summary>
     /// <param name="id">Journal entry ID</param>
     [HttpDelete("{id}")]
-    public ActionResult DeleteJournalEntry(string id)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult> DeleteJournalEntry(string id)
     {
-        var entry = _journalEntries.FirstOrDefault(e => e.Id == id);
-        if (entry == null)
-            return NotFound(new { message = "Journal entry not found" });
+        try
+        {
+            _logger.LogInformation("DeleteJournalEntry endpoint called for id {EntryId}", id);
+            var result = await _journalEntryService.DeleteJournalEntryAsync(id);
 
-        if (entry.IsPosted)
-            return BadRequest(new { message = "Cannot delete a posted journal entry" });
+            if (!result)
+                return NotFound(new { message = $"Journal entry with id {id} not found" });
 
-        _journalEntries.Remove(entry);
-        return NoContent();
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Business logic error in DeleteJournalEntry: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
     }
-}
-
-/// <summary>
-/// Request model for creating a journal entry
-/// </summary>
-public class CreateJournalEntryRequest
-{
-    public string Description { get; set; } = string.Empty;
-    public string ReferenceNumber { get; set; } = string.Empty;
-    public DateTime? EntryDate { get; set; }
-    public List<JournalLine> Lines { get; set; } = new();
 }

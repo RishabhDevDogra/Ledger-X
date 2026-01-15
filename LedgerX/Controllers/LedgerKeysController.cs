@@ -1,49 +1,37 @@
 using Microsoft.AspNetCore.Mvc;
-using LedgerX.Models;
+using LedgerX.DTOs;
+using LedgerX.Services;
 
 namespace LedgerX.Controllers;
 
+/// <summary>
+/// Controller for Ledger Key management
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
 public class LedgerKeysController : ControllerBase
 {
-    private static List<LedgerKey> _ledgerKeys = new()
+    private readonly ILedgerKeyService _ledgerKeyService;
+    private readonly ILogger<LedgerKeysController> _logger;
+
+    public LedgerKeysController(ILedgerKeyService ledgerKeyService, ILogger<LedgerKeysController> logger)
     {
-        new LedgerKey
-        {
-            KeyName = "Production Key",
-            EncryptionKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
-            CreatedAt = new DateTime(2024, 1, 1),
-            ExpiresAt = new DateTime(2025, 12, 31),
-            IsActive = true
-        },
-        new LedgerKey
-        {
-            KeyName = "Development Key",
-            EncryptionKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
-            CreatedAt = DateTime.UtcNow.AddMonths(-3),
-            ExpiresAt = null,
-            IsActive = true
-        },
-        new LedgerKey
-        {
-            KeyName = "Backup Key",
-            EncryptionKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
-            CreatedAt = new DateTime(2023, 6, 1),
-            ExpiresAt = new DateTime(2024, 6, 1),
-            IsActive = false
-        }
-    };
+        _ledgerKeyService = ledgerKeyService ?? throw new ArgumentNullException(nameof(ledgerKeyService));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
 
     /// <summary>
     /// Get all ledger keys
     /// </summary>
     /// <returns>List of all ledger keys</returns>
     [HttpGet]
-    public ActionResult<IEnumerable<LedgerKey>> GetAllKeys()
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<LedgerKeyDto>>> GetAllKeys()
     {
-        return Ok(_ledgerKeys);
+        _logger.LogDebug("GetAllKeys endpoint called");
+        var keys = await _ledgerKeyService.GetAllKeysAsync();
+        return Ok(keys);
     }
 
     /// <summary>
@@ -52,20 +40,43 @@ public class LedgerKeysController : ControllerBase
     /// <param name="id">Ledger key ID</param>
     /// <returns>Ledger key details (without sensitive data)</returns>
     [HttpGet("{id}")]
-    public ActionResult<LedgerKeyResponse> GetKeyById(string id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<LedgerKeyDto>> GetKeyById(string id)
     {
-        var key = _ledgerKeys.FirstOrDefault(k => k.Id == id);
+        _logger.LogDebug("GetKeyById endpoint called with id {KeyId}", id);
+        var key = await _ledgerKeyService.GetKeyByIdAsync(id);
+        
         if (key == null)
-            return NotFound(new { message = "Ledger key not found" });
+            return NotFound(new { message = $"Ledger key with id {id} not found" });
 
-        return Ok(new LedgerKeyResponse
-        {
-            Id = key.Id,
-            KeyName = key.KeyName,
-            CreatedAt = key.CreatedAt,
-            ExpiresAt = key.ExpiresAt,
-            IsActive = key.IsActive
-        });
+        return Ok(key);
+    }
+
+    /// <summary>
+    /// Get all active ledger keys
+    /// </summary>
+    /// <returns>List of active ledger keys</returns>
+    [HttpGet("active")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<LedgerKeyDto>>> GetActiveKeys()
+    {
+        _logger.LogDebug("GetActiveKeys endpoint called");
+        var keys = await _ledgerKeyService.GetActiveKeysAsync();
+        return Ok(keys);
+    }
+
+    /// <summary>
+    /// Get all expired ledger keys
+    /// </summary>
+    /// <returns>List of expired ledger keys</returns>
+    [HttpGet("expired")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<LedgerKeyDto>>> GetExpiredKeys()
+    {
+        _logger.LogDebug("GetExpiredKeys endpoint called");
+        var keys = await _ledgerKeyService.GetExpiredKeysAsync();
+        return Ok(keys);
     }
 
     /// <summary>
@@ -74,28 +85,21 @@ public class LedgerKeysController : ControllerBase
     /// <param name="request">Key creation request</param>
     /// <returns>Created ledger key</returns>
     [HttpPost]
-    public ActionResult<LedgerKeyResponse> CreateKey([FromBody] CreateLedgerKeyRequest request)
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<LedgerKeyDto>> CreateKey([FromBody] CreateLedgerKeyDto request)
     {
-        if (string.IsNullOrEmpty(request.KeyName))
-            return BadRequest(new { message = "KeyName is required" });
-
-        var key = new LedgerKey
+        try
         {
-            KeyName = request.KeyName,
-            EncryptionKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
-            ExpiresAt = request.ExpiresAt
-        };
-
-        _ledgerKeys.Add(key);
-        
-        return CreatedAtAction(nameof(GetKeyById), new { id = key.Id }, new LedgerKeyResponse
+            _logger.LogInformation("CreateKey endpoint called with name {KeyName}", request.KeyName);
+            var key = await _ledgerKeyService.CreateKeyAsync(request);
+            return CreatedAtAction(nameof(GetKeyById), new { id = key.Id }, key);
+        }
+        catch (ArgumentException ex)
         {
-            Id = key.Id,
-            KeyName = key.KeyName,
-            CreatedAt = key.CreatedAt,
-            ExpiresAt = key.ExpiresAt,
-            IsActive = key.IsActive
-        });
+            _logger.LogWarning("Validation error in CreateKey: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -103,22 +107,17 @@ public class LedgerKeysController : ControllerBase
     /// </summary>
     /// <param name="id">Ledger key ID</param>
     [HttpPost("{id}/rotate")]
-    public ActionResult<LedgerKeyResponse> RotateKey(string id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<LedgerKeyDto>> RotateKey(string id)
     {
-        var key = _ledgerKeys.FirstOrDefault(k => k.Id == id);
-        if (key == null)
-            return NotFound(new { message = "Ledger key not found" });
-
-        key.EncryptionKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        _logger.LogInformation("RotateKey endpoint called for id {KeyId}", id);
+        var key = await _ledgerKeyService.RotateKeyAsync(id);
         
-        return Ok(new LedgerKeyResponse
-        {
-            Id = key.Id,
-            KeyName = key.KeyName,
-            CreatedAt = key.CreatedAt,
-            ExpiresAt = key.ExpiresAt,
-            IsActive = key.IsActive
-        });
+        if (key == null)
+            return NotFound(new { message = $"Ledger key with id {id} not found" });
+
+        return Ok(key);
     }
 
     /// <summary>
@@ -126,22 +125,17 @@ public class LedgerKeysController : ControllerBase
     /// </summary>
     /// <param name="id">Ledger key ID</param>
     [HttpPost("{id}/deactivate")]
-    public ActionResult<LedgerKeyResponse> DeactivateKey(string id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<LedgerKeyDto>> DeactivateKey(string id)
     {
-        var key = _ledgerKeys.FirstOrDefault(k => k.Id == id);
-        if (key == null)
-            return NotFound(new { message = "Ledger key not found" });
-
-        key.IsActive = false;
+        _logger.LogInformation("DeactivateKey endpoint called for id {KeyId}", id);
+        var key = await _ledgerKeyService.DeactivateKeyAsync(id);
         
-        return Ok(new LedgerKeyResponse
-        {
-            Id = key.Id,
-            KeyName = key.KeyName,
-            CreatedAt = key.CreatedAt,
-            ExpiresAt = key.ExpiresAt,
-            IsActive = key.IsActive
-        });
+        if (key == null)
+            return NotFound(new { message = $"Ledger key with id {id} not found" });
+
+        return Ok(key);
     }
 
     /// <summary>
@@ -149,34 +143,16 @@ public class LedgerKeysController : ControllerBase
     /// </summary>
     /// <param name="id">Ledger key ID</param>
     [HttpDelete("{id}")]
-    public ActionResult DeleteKey(string id)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> DeleteKey(string id)
     {
-        var key = _ledgerKeys.FirstOrDefault(k => k.Id == id);
-        if (key == null)
-            return NotFound(new { message = "Ledger key not found" });
+        _logger.LogInformation("DeleteKey endpoint called for id {KeyId}", id);
+        var result = await _ledgerKeyService.DeleteKeyAsync(id);
 
-        _ledgerKeys.Remove(key);
+        if (!result)
+            return NotFound(new { message = $"Ledger key with id {id} not found" });
+
         return NoContent();
     }
-}
-
-/// <summary>
-/// Request model for creating a ledger key
-/// </summary>
-public class CreateLedgerKeyRequest
-{
-    public string KeyName { get; set; } = string.Empty;
-    public DateTime? ExpiresAt { get; set; }
-}
-
-/// <summary>
-/// Response model for ledger key (without sensitive encryption key)
-/// </summary>
-public class LedgerKeyResponse
-{
-    public string Id { get; set; } = string.Empty;
-    public string KeyName { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; }
-    public DateTime? ExpiresAt { get; set; }
-    public bool IsActive { get; set; }
 }

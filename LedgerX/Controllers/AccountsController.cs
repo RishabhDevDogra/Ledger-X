@@ -1,35 +1,37 @@
 using Microsoft.AspNetCore.Mvc;
-using LedgerX.Models;
+using LedgerX.DTOs;
+using LedgerX.Services;
 
 namespace LedgerX.Controllers;
 
+/// <summary>
+/// Controller for Account operations
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
 public class AccountsController : ControllerBase
 {
-    private static List<Account> _accounts = new()
+    private readonly IAccountService _accountService;
+    private readonly ILogger<AccountsController> _logger;
+
+    public AccountsController(IAccountService accountService, ILogger<AccountsController> logger)
     {
-        new Account { Code = "10", Name = "Cash", Type = "Asset", Balance = 50000 },
-        new Account { Code = "130", Name = "Bank Account", Type = "Asset", Balance = 100000 },
-        new Account { Code = "1300", Name = "Accounts Receivable", Type = "Asset", Balance = 25000 },
-        new Account { Code = "2300", Name = "Accounts Payable", Type = "Liability", Balance = 15000 },
-        new Account { Code = "2100", Name = "Short Term Loans", Type = "Liability", Balance = 30000 },
-        new Account { Code = "3000", Name = "Common Stock", Type = "Equity", Balance = 100000 },
-        new Account { Code = "3100", Name = "Retained Earnings", Type = "Equity", Balance = 60000 },
-        new Account { Code = "4000", Name = "Sales Revenue", Type = "Revenue", Balance = 200000 },
-        new Account { Code = "5000", Name = "Cost of Goods Sold", Type = "Expense", Balance = 80000 },
-        new Account { Code = "5100", Name = "Salary Expense", Type = "Expense", Balance = 40000 }
-    };
+        _accountService = accountService ?? throw new ArgumentNullException(nameof(accountService));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
 
     /// <summary>
     /// Get all accounts
     /// </summary>
     /// <returns>List of all accounts</returns>
     [HttpGet]
-    public ActionResult<IEnumerable<Account>> GetAllAccounts()
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<AccountDto>>> GetAllAccounts()
     {
-        return Ok(_accounts);
+        _logger.LogDebug("GetAllAccounts endpoint called");
+        var accounts = await _accountService.GetAllAccountsAsync();
+        return Ok(accounts);
     }
 
     /// <summary>
@@ -38,13 +40,49 @@ public class AccountsController : ControllerBase
     /// <param name="id">Account ID</param>
     /// <returns>Account details</returns>
     [HttpGet("{id}")]
-    public ActionResult<Account> GetAccountById(string id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AccountDto>> GetAccountById(string id)
     {
-        var account = _accounts.FirstOrDefault(a => a.Id == id);
+        _logger.LogDebug("GetAccountById endpoint called with id {AccountId}", id);
+        var account = await _accountService.GetAccountByIdAsync(id);
+        
         if (account == null)
-            return NotFound(new { message = "Account not found" });
+            return NotFound(new { message = $"Account with id {id} not found" });
 
         return Ok(account);
+    }
+
+    /// <summary>
+    /// Get account by code
+    /// </summary>
+    /// <param name="code">Account code</param>
+    /// <returns>Account details</returns>
+    [HttpGet("by-code/{code}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AccountDto>> GetAccountByCode(string code)
+    {
+        _logger.LogDebug("GetAccountByCode endpoint called with code {AccountCode}", code);
+        var account = await _accountService.GetAccountByCodeAsync(code);
+        
+        if (account == null)
+            return NotFound(new { message = $"Account with code {code} not found" });
+
+        return Ok(account);
+    }
+
+    /// <summary>
+    /// Get all active accounts
+    /// </summary>
+    /// <returns>List of active accounts</returns>
+    [HttpGet("active")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<AccountDto>>> GetActiveAccounts()
+    {
+        _logger.LogDebug("GetActiveAccounts endpoint called");
+        var accounts = await _accountService.GetActiveAccountsAsync();
+        return Ok(accounts);
     }
 
     /// <summary>
@@ -53,21 +91,27 @@ public class AccountsController : ControllerBase
     /// <param name="request">Account creation request</param>
     /// <returns>Created account</returns>
     [HttpPost]
-    public ActionResult<Account> CreateAccount([FromBody] CreateAccountRequest request)
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AccountDto>> CreateAccount([FromBody] CreateAccountDto request)
     {
-        if (string.IsNullOrEmpty(request.Code) || string.IsNullOrEmpty(request.Name))
-            return BadRequest(new { message = "Code and Name are required" });
-
-        var account = new Account
+        try
         {
-            Code = request.Code,
-            Name = request.Name,
-            Type = request.Type,
-            Balance = request.Balance
-        };
-
-        _accounts.Add(account);
-        return CreatedAtAction(nameof(GetAccountById), new { id = account.Id }, account);
+            _logger.LogInformation("CreateAccount endpoint called with code {AccountCode}", request.Code);
+            var account = await _accountService.CreateAccountAsync(request);
+            return CreatedAtAction(nameof(GetAccountById), new { id = account.Id }, account);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning("Validation error in CreateAccount: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Conflict in CreateAccount: {Message}", ex.Message);
+            return Conflict(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -77,17 +121,26 @@ public class AccountsController : ControllerBase
     /// <param name="request">Update request</param>
     /// <returns>Updated account</returns>
     [HttpPut("{id}")]
-    public ActionResult<Account> UpdateAccount(string id, [FromBody] UpdateAccountRequest request)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AccountDto>> UpdateAccount(string id, [FromBody] UpdateAccountDto request)
     {
-        var account = _accounts.FirstOrDefault(a => a.Id == id);
-        if (account == null)
-            return NotFound(new { message = "Account not found" });
+        try
+        {
+            _logger.LogInformation("UpdateAccount endpoint called for id {AccountId}", id);
+            var account = await _accountService.UpdateAccountAsync(id, request);
+            
+            if (account == null)
+                return NotFound(new { message = $"Account with id {id} not found" });
 
-        account.Name = request.Name ?? account.Name;
-        account.Type = request.Type ?? account.Type;
-        account.IsActive = request.IsActive ?? account.IsActive;
-
-        return Ok(account);
+            return Ok(account);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning("Validation error in UpdateAccount: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -95,34 +148,16 @@ public class AccountsController : ControllerBase
     /// </summary>
     /// <param name="id">Account ID</param>
     [HttpDelete("{id}")]
-    public ActionResult DeleteAccount(string id)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> DeleteAccount(string id)
     {
-        var account = _accounts.FirstOrDefault(a => a.Id == id);
-        if (account == null)
-            return NotFound(new { message = "Account not found" });
+        _logger.LogInformation("DeleteAccount endpoint called for id {AccountId}", id);
+        var result = await _accountService.DeleteAccountAsync(id);
 
-        _accounts.Remove(account);
+        if (!result)
+            return NotFound(new { message = $"Account with id {id} not found" });
+
         return NoContent();
     }
-}
-
-/// <summary>
-/// Request model for creating an account
-/// </summary>
-public class CreateAccountRequest
-{
-    public string Code { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty; // Asset, Liability, Equity, Revenue, Expense
-    public decimal Balance { get; set; }
-}
-
-/// <summary>
-/// Request model for updating an account
-/// </summary>
-public class UpdateAccountRequest
-{
-    public string? Name { get; set; }
-    public string? Type { get; set; }
-    public bool? IsActive { get; set; }
 }

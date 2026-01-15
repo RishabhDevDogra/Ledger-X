@@ -19,15 +19,11 @@
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/LedgerX.csproj.CoreCompileInputs.cache
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/LedgerX.MvcApplicationPartsAssemblyInfo.cs
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/LedgerX.MvcApplicationPartsAssemblyInfo.cache
-/Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/LedgerX.RazorAssemblyInfo.cache
-/Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/LedgerX.RazorAssemblyInfo.cs
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/LedgerX.sourcelink.json
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/rjimswa.dswa.cache.json
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/rjsmrazor.dswa.cache.json
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/rjsmcshtml.dswa.cache.json
-/Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/scopedcss/Views/Shared/_Layout.cshtml.rz.scp.css
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/scopedcss/bundle/LedgerX.styles.css
-/Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/scopedcss/projectbundle/LedgerX.bundle.scp.css
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/compressed/ndulad1zau-{0}-lugek5hnai-lugek5hnai.gz
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/compressed/1biwvi7nz1-{0}-61n19gt1b8-61n19gt1b8.gz
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/compressed/2ed6e7v6dg-{0}-fr7q2aak1r-fr7q2aak1r.gz
@@ -90,8 +86,6 @@
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/compressed/i1pfebt7z8-{0}-muycvpuwrr-muycvpuwrr.gz
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/compressed/9fbh9htkrn-{0}-87fc7y1x7t-87fc7y1x7t.gz
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/compressed/a8b99vtb7d-{0}-jfsiqqwiad-jfsiqqwiad.gz
-/Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/compressed/hk0g13f55c-{0}-z1prke38nb-z1prke38nb.gz
-/Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/compressed/amm8mbu8od-{0}-z1prke38nb-z1prke38nb.gz
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/staticwebassets.build.json
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/staticwebassets.build.json.cache
 /Users/rishabh/LedgerX/LedgerX/obj/Debug/net10.0/staticwebassets.development.json
